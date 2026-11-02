@@ -27,7 +27,7 @@ License
 #include "addToRunTimeSelectionTable.H"
 #include "fvPatchFieldMapper.H"
 #include "volFields.H"
-#include "mappedPatchBase.H" //v12: needed for vegetation→air mapping via polyPatch mapper
+#include "nearestPatchField.H" //v12: nearest vegetation patch face, replaces ad-hoc mappedPatchBase
 #include "mappedFvPatchBaseBase.H" //v12: for solid↔air fvPatch mapper
 #include "fixedValueFvPatchFields.H"
 #include "Function1.H"
@@ -355,26 +355,15 @@ void CFDHAMsolidTemperatureCoupledMixedFvPatchScalarField::updateCoeffs()
             const fvPatch& vegiNbrPatch =
                 refCast<const fvMesh>(vegiMesh).boundary()[patchi];
 
-            dictionary directMapperDict;
-            directMapperDict.add("neighbourRegion", vegiRegion);
-            directMapperDict.add("neighbourPatch", nbrPatchName);
-            directMapperDict.add("matchTolerance", 0.05);
-            const mappedPatchBase directMapper
-            (
-                patch().patch(),
-                directMapperDict,
-                true
-            );
-
             if (qrNbrName_ != "none")
             {
                 scalarField qrVeg = vegiNbrPatch.lookupPatchField<volScalarField, scalar>(qrNbrName_);
-                qrNbr = directMapper.fromNeighbour(qrVeg)();
+                qrNbr = nearestPatchField(patch().Cf(), vegiNbrPatch.Cf(), qrVeg)();
             }
             if (qsNbrName_ != "none")
             {
                 scalarField qsVeg = vegiNbrPatch.lookupPatchField<volScalarField, scalar>(qsNbrName_);
-                qsNbr = directMapper.fromNeighbour(qsVeg)();
+                qsNbr = nearestPatchField(patch().Cf(), vegiNbrPatch.Cf(), qsVeg)();
             }
             timeOfLastRadUpdate = time.value();
         }

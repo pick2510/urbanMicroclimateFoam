@@ -805,13 +805,13 @@ int main(int argc, char *argv[])
             IOobject::NO_WRITE,
             false
         )
-    );  
+    );
     if (vegNames.size()>0 && !kcLAIboundaryList.headerOk())
     {
         FatalErrorInFunction
             << "File kcLAIboundary not found! Did you not run calcLAI before?"
             << exit(FatalError);
-    }      
+    }
 
     if (vegNames.size()>0)
     {

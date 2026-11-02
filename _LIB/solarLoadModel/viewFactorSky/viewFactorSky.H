@@ -87,10 +87,28 @@ class viewFactorSky
         //- Net radiative heat flux [W/m^2]
         volScalarField qr_;
 
-        //- View factor matrix
+        //- View-factor workflow: sparse (default) or dense
+        word viewFactorWorkflow_;
+
+        //- Local sparse view-factor column ids
+        labelListList globalFaceFaces_;
+
+        //- Local sparse view-factor coefficients
+        scalarListList viewFactors_;
+
+        //- Local row to global coarse-face ids
+        labelList localGlobalIds_;
+
+        //- Previous sparse solve result, used as Krylov initial guess
+        mutable scalarField qPrev_;
+
+        //- Whether qPrev_ contains a valid previous solution
+        mutable bool qPrevValid_;
+
+        //- Dense view-factor matrix
         autoPtr<scalarSquareMatrix> Fmatrix_;
 
-        //- Inverse of C matrix
+        //- Inverse of dense C matrix
         autoPtr<scalarSquareMatrix> CLU_;
 
         //- Selected patches
@@ -105,12 +123,15 @@ class viewFactorSky
         //- Constant emissivity
         bool constEmissivity_;
 
-        //- Iterations Counter
+        //- Iteration counter for dense constant-emissivity caching
         label iterCounter_;
 
-        //- Pivot Indices for LU decomposition
+        //- Pivot indices for dense LU decomposition
         labelList pivotIndices_;
-        
+
+        //- Flag set on ALL procs once ensureDenseStructures has run
+        bool denseStructuresInitialized_;
+
         //- List of grass patches
         hashedWordList grassPatches;
 
@@ -120,7 +141,13 @@ class viewFactorSky
         //- Initialise
         void initialise();
 
-        //- Insert view factors into main matrix
+        //- Read and validate the dense/sparse workflow setting
+        void readViewFactorWorkflow();
+
+        //- Ensure dense matrix data structures are available
+        void ensureDenseStructures();
+
+        //- Insert view factors into dense matrix
         void insertMatrixElements
         (
             const globalIndex& index,
@@ -129,6 +156,47 @@ class viewFactorSky
             const scalarListList& viewFactors,
             scalarSquareMatrix& matrix
         );
+
+        //- Assemble locally-owned global vector entries across processors
+        void assembleGlobal(scalarField& x) const;
+
+        //- Dot product over locally-owned rows
+        scalar localDot
+        (
+            const scalarField& a,
+            const scalarField& b
+        ) const;
+
+        //- Sparse thermal view-factor matrix-vector multiply
+        void multiply
+        (
+            const scalarField& x,
+            const scalarField& E,
+            scalarField& Ax
+        ) const;
+
+        //- Solve the sparse thermal view-factor system
+        scalarField solveViewFactorSystem
+        (
+            const scalarField& b,
+            const scalarField& E
+        ) const;
+
+        //- Solve the dense thermal view-factor system
+        scalarField solveViewFactorSystemDense
+        (
+            const scalarField& T4,
+            const scalarField& qrExt,
+            const scalarField& E
+        );
+
+        //- Compare sparse solution with a rank-0 dense solve for validation
+        void referenceCheck
+        (
+            const scalarField& q,
+            const scalarField& b,
+            const scalarField& E
+        ) const;
 
 
 public:

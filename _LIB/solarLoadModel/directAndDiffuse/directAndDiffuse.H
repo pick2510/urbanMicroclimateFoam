@@ -83,26 +83,47 @@ class directAndDiffuse
         //- Net radiative heat flux [W/m2]
         volScalarField qs_;
 
-        //- View factor matrix
-        autoPtr<scalarSquareMatrix> Fmatrix_;        
+        //- View-factor workflow: sparse (default) or dense
+        word viewFactorWorkflow_;
 
-        //- Inverse of C matrix
+        //- Local sparse view-factor column ids
+        labelListList globalFaceFaces_;
+
+        //- Local sparse view-factor coefficients
+        scalarListList viewFactors_;
+
+        //- Local row to global coarse-face ids
+        labelList localGlobalIds_;
+
+        //- Previous sparse solve result, used as Krylov initial guess
+        mutable scalarField qPrev_;
+
+        //- Whether qPrev_ contains a valid previous solution
+        mutable bool qPrevValid_;
+
+        //- Dense view-factor matrix
+        autoPtr<scalarSquareMatrix> Fmatrix_;
+
+        //- Inverse of dense C matrix
         autoPtr<scalarSquareMatrix> CLU_;
-        
-        //- solarLoadFineFaces_
-        autoPtr<scalarListList> solarLoadFineFacesGlobal_;
+
+        //- Local solar-load fine-face coefficients
+        scalarListList solarLoadFineFaces_;
             
         label solarLoadFineFacesSize;         
         
-        //- skyViewCoeffGlobal_
-        autoPtr<scalarListList> skyViewCoeffGlobal_;
+        //- Local sky view coefficients
+        scalarListList skyViewCoeff_;
 
         label skyViewCoeffSize; 
         
-        //- sunViewCoeffGlobal_
-        autoPtr<scalarListList> sunViewCoeffGlobal_;        
+        //- Local sun view coefficients
+        scalarListList sunViewCoeff_;
 
         label sunViewCoeffSize;    
+
+        //- Local coarse sun/sky global map
+        labelList sunskyMap_;
 
         //- Selected patches
         labelList selectedPatches_;
@@ -131,18 +152,27 @@ class directAndDiffuse
         //- timestepsInADay
         label timestepsInADay_;         
 
-        //- Iterations Counter
+        //- Iteration counter for dense constant-albedo caching
         label iterCounter_;
 
-        //- Pivot Indices for LU decomposition
+        //- Pivot indices for dense LU decomposition
         labelList pivotIndices_;
+
+        //- Flag set on ALL procs once ensureDenseStructures has run
+        bool denseStructuresInitialized_;
 
     // Private Member Functions
 
         //- Initialise
         void initialise();
 
-        //- Insert view factors into main matrix
+        //- Read and validate the dense/sparse workflow setting
+        void readViewFactorWorkflow();
+
+        //- Ensure dense matrix data structures are available
+        void ensureDenseStructures();
+
+        //- Insert view factors into dense matrix
         void insertMatrixElements
         (
             const globalIndex& index,
@@ -151,17 +181,54 @@ class directAndDiffuse
             const scalarListList& viewFactors,
             scalarSquareMatrix& matrix
         );
-        
-        void insertScalarListListElements
+
+        //- Assemble locally-owned global vector entries across processors
+        void assembleGlobal(scalarField& x) const;
+
+        //- Dot product over locally-owned rows
+        scalar localDot
         (
-            const globalIndex& index,
-            const label fromProcI,
-            const labelListList& sunskyMap,
-            const labelListList& globalFaceFaces,
+            const scalarField& a,
+            const scalarField& b
+        ) const;
+
+        //- Sparse solar view-factor matrix-vector multiply
+        void multiply
+        (
+            const scalarField& x,
+            const scalarField& A,
+            scalarField& Ax
+        ) const;
+
+        //- Solve the sparse solar view-factor system
+        scalarField solveViewFactorSystem
+        (
+            const scalarField& b,
+            const scalarField& A
+        ) const;
+
+        //- Solve the dense solar view-factor system
+        scalarField solveViewFactorSystemDense
+        (
+            const scalarField& Isol,
+            const scalarField& qsExt,
+            const scalarField& A
+        );
+
+        //- Compare sparse solution with a rank-0 dense solve for validation
+        void referenceCheck
+        (
+            const scalarField& q,
+            const scalarField& b,
+            const scalarField& A
+        ) const;
+
+        //- Assemble one local coarse solar coefficient time slice globally
+        scalarField globalCoarseCoeff
+        (
             const scalarListList& localCoeffs,
-            scalarListList& globalCoeffs,
-            const word& coarseOrFine
-        );                    
+            const label vectorId
+        ) const;
 
         //- Disallow default bitwise copy construct
         directAndDiffuse(const directAndDiffuse&);

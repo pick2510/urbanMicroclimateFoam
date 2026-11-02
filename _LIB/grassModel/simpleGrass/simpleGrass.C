@@ -30,7 +30,7 @@ License
 #include "addToRunTimeSelectionTable.H"
 
 #include "mixedFvPatchFields.H"
-#include "mappedPatchBase.H" //v12: needed for vegetation→air mapping via ad-hoc mapper
+#include "nearestPatchField.H" //v12: nearest vegetation patch face, replaces ad-hoc mappedPatchBase
 #include "mappedFvPatchBaseBase.H" //v12
 
 // regionProperties removed in v12 - use direct mesh lookup instead
@@ -118,7 +118,7 @@ Foam::grass::simpleGrass::simpleGrass(const volScalarField& T)
             IOobject::READ_IF_PRESENT,
             IOobject::AUTO_WRITE
         ),
-        T*0
+        1*T
     ),
     Sw_
     (
@@ -232,22 +232,11 @@ void Foam::grass::simpleGrass::calculate
                 const fvPatch& vegiNbrPatch =
                     refCast<const fvMesh>(vegiMesh).boundary()[vegiPatchID];
 
-                dictionary directMapperDict;
-                directMapperDict.add("neighbourRegion", "vegetation");
-                directMapperDict.add("neighbourPatch", thisPatch.name());
-                directMapperDict.add("matchTolerance", 0.05);
-                const mappedPatchBase directMapper
-                (
-                    thisPatch.patch(),
-                    directMapperDict,
-                    true
-                );
-
                 scalarField qsVeg = vegiNbrPatch.lookupPatchField<volScalarField, scalar>("qs");
-                qs = directMapper.fromNeighbour(qsVeg)();
+                qs = nearestPatchField(thisPatch.Cf(), vegiNbrPatch.Cf(), qsVeg)();
 
                 scalarField qrVeg = vegiNbrPatch.lookupPatchField<volScalarField, scalar>("qr");
-                qr = directMapper.fromNeighbour(qrVeg)();
+                qr = nearestPatchField(thisPatch.Cf(), vegiNbrPatch.Cf(), qrVeg)();
             }
             else
             {

@@ -234,6 +234,7 @@ void interpfvMeshToCartesian
 
     dp = vector(minCellL,minCellL,minCellL); // grid spacing
 
+    // Without vegetation pmin/pmax are meaningless and the grid below degenerates
     if (gMax(LAD) <= 10*SMALL)
     {
         FatalErrorInFunction
@@ -360,6 +361,7 @@ void interpcartesianToRotCartesian
     nyRot = ceil( (pmaxRot.y()-pminRot.y()) / dp.y()) + 1;
     nzRot = ceil( (pmaxRot.z()-pminRot.z()) / dp.z()) + 1;
 
+    // nxRot*nyRot*nzRot indexes a scalarField, so it must fit a label
     if (scalar(nxRot)*scalar(nyRot)*scalar(nzRot) > scalar(labelMax))
     {
         FatalErrorInFunction

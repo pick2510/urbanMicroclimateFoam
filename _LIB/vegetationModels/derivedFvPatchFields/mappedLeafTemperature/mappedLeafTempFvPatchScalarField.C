@@ -26,7 +26,8 @@ License
 #include "mappedLeafTempFvPatchScalarField.H"
 #include "addToRunTimeSelectionTable.H"
 #include "volFields.H"
-#include "Tuple2.H"
+#include "indexedOctree.H"
+#include "treeDataPoint.H"
 //v8: #include "mappedFvPatchBaseBase.H"
 #include "mappedInternalPatchBase.H" //v12: mappedInternal uses separate class hierarchy
 
@@ -137,38 +138,44 @@ void Foam::mappedLeafTempFvPatchScalarField::updateCoeffs()
     Pstream::gatherList(vegCellValues);
     Pstream::scatterList(vegCellValues);
 
-    List<Tuple2<scalar, scalar>> nearest(Tp.size());
-    //Tuple2 comprising 0: sqr(distance), 1: value
-
-    forAll(nearest, i)
+    //flatten canopy cells of all processors
+    DynamicList<point> allCentres;
+    DynamicList<scalar> allValues;
+    forAll(vegCellCentres, proci)
     {
-        //initialize
-        nearest[i].first() = great;
-        nearest[i].second() = great;
+        allCentres.append(vegCellCentres[proci]);
+        allValues.append(vegCellValues[proci]);
+    }
 
-        //findNearer
+    //nearest canopy cell via octree (keep the current value when no
+    //LAD>0/Tl>0 cells exist globally yet, e.g. before the first vegetation solve)
+    if (allCentres.size())
+    {
+        pointField centres;
+        centres.transfer(allCentres);
 
-        forAll (vegCellCentres, proci)
+        //fixed padding so a single canopy cell does not give a zero-size box
+        treeBoundBox bb(centres);
+        bb.min() -= vector::uniform(1e-3);
+        bb.max() += vector::uniform(1e-3);
+
+        const indexedOctree<treeDataPoint> tree
+        (
+            treeDataPoint(centres),
+            bb,
+            8,      // maxLevel
+            10,     // leafsize
+            3.0     // duplicity
+        );
+
+        const vectorField& Cf = this->patch().Cf();
+        forAll(Tp, i)
         {
-            forAll(vegCellCentres[proci], pointi)
+            const pointIndexHit hit = tree.findNearest(Cf[i], sqr(great));
+            if (hit.hit())
             {
-                const point& location = this->patch().Cf()[i];
-                scalar distSqr = magSqr(vegCellCentres[proci][pointi] - location);
-
-                if (distSqr < nearest[i].first())
-                {
-                    nearest[i].first() = distSqr;
-                    nearest[i].second() = vegCellValues[proci][pointi];
-                }
+                Tp[i] = allValues[hit.index()];
             }
-        }
-
-        //update value (only when a canopy cell was actually found; otherwise
-        //keep the current value to avoid writing 'great' when no LAD>0/Tl>0
-        //cells exist globally yet, e.g. before the first vegetation solve)
-        if (nearest[i].first() < great)
-        {
-            Tp[i] = nearest[i].second();
         }
     }
 
